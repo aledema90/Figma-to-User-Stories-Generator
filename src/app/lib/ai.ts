@@ -15,11 +15,13 @@ export async function generateStories(prompt: string): Promise<string> {
     return completion.choices[0].message?.content || "Nessuna story generata.";
   }
 
-  // Default: Ollama
+  // Default: Ollama (richiede stream: false per avere la risposta completa)
   const response = await axios.post("http://localhost:11434/api/generate", {
     model: process.env.OLLAMA_MODEL || "llama3",
     prompt: prompt,
+    stream: false,
   });
 
-  return response.data.response || "Nessuna story generata.";
+  const text: string | undefined = response?.data?.response;
+  return (text && text.trim()) || "Nessuna story generata.";
 }
