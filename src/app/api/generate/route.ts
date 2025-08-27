@@ -6,6 +6,7 @@ type FigmaNode = {
   type?: string; // Tipo del nodo Figma (FRAME, COMPONENT, ...)
   name?: string; // Nome del nodo (usato come etichetta schermata)
   children?: FigmaNode[]; // Figli del nodo per la visita ricorsiva
+  id?: string; // Identificatore del nodo (usato per richiedere immagini)
 };
 
 function extractFileKey(figmaUrl: string): string | null {
@@ -89,7 +90,36 @@ export async function POST(request: Request) {
 
     walk(document); // Avvia la visita dal nodo root
 
-    // 4. Prompt per AI (stringa multi-linea per istruire il modello)
+    // 4. Raccolta immagini dei frame principali (limite a 3 per sicurezza)
+    const frameIds: string[] = [];
+    function collectFrameIds(node: FigmaNode) {
+      if (frameIds.length >= 3) return;
+      if (node.type === "FRAME" && node.id) frameIds.push(node.id);
+      if (node.children) node.children.forEach(collectFrameIds);
+    }
+    collectFrameIds(document);
+
+    let imageDataUrls: string[] = [];
+    if (frameIds.length > 0) {
+      const idsParam = encodeURIComponent(frameIds.join(","));
+      const imagesResp = await fetch(
+        `https://api.figma.com/v1/images/${fileKey}?ids=${idsParam}&format=png`,
+        { headers: { "X-Figma-Token": process.env.FIGMA_TOKEN as string } }
+      );
+      const imagesJson = await imagesResp.json();
+      const urls: string[] = frameIds
+        .map((id) => imagesJson.images?.[id])
+        .filter(Boolean);
+      // Fetch ogni immagine e codifica base64 (limitata alle prime 3)
+      const buffers = await Promise.all(
+        urls.slice(0, 3).map((u) => fetch(u).then((r) => r.arrayBuffer()))
+      );
+      imageDataUrls = buffers.map(
+        (buf) => `data:image/png;base64,${Buffer.from(buf).toString("base64")}`
+      );
+    }
+
+    // 5. Prompt per AI (stringa multi-linea per istruire il modello)
     const prompt = `
 Sei un Product Manager e devi generare user stories per queste schermate di un'app:
 ${screens.join("\n")}
@@ -99,7 +129,7 @@ Formato:
 Acceptance criteria in Gherkin (Given/When/Then).
     `;
 
-    const stories = await generateStories(prompt); // Invoca il modello AI e ottiene il testo generato
+    const stories = await generateStories(prompt, imageDataUrls); // Invoca il modello AI (con immagini se disponibili)
 
     return NextResponse.json({ stories, screens }); // Risponde al client con stories e schermate
   } catch (err: unknown) {

@@ -3,7 +3,10 @@ import OpenAI from "openai";
 
 const aiProvider = process.env.AI_PROVIDER || "ollama";
 
-export async function generateStories(prompt: string): Promise<string> {
+export async function generateStories(
+  prompt: string,
+  images?: string[]
+): Promise<string> {
   if (aiProvider === "openai") {
     const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
@@ -16,11 +19,18 @@ export async function generateStories(prompt: string): Promise<string> {
   }
 
   // Default: Ollama (richiede stream: false per avere la risposta completa)
-  const response = await axios.post("http://localhost:11434/api/generate", {
+  const body: Record<string, unknown> = {
     model: process.env.OLLAMA_MODEL || "llama3",
     prompt: prompt,
     stream: false,
-  });
+  };
+  if (images && images.length > 0) {
+    body.images = images; // Supporto multimodale (es. llava)
+  }
+  const response = await axios.post(
+    "http://localhost:11434/api/generate",
+    body
+  );
 
   const text: string | undefined = response?.data?.response;
   return (text && text.trim()) || "Nessuna story generata.";
