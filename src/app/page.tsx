@@ -1,78 +1,129 @@
-"use client"; // Rende questo file un Client Component
-import { useState } from "react"; // Importa l'hook di stato di React
+// src/app/page.tsx
+"use client";
+
+import { useState } from "react";
+import FigmaImporter from "./components/FigmaImporter";
+import UserStoryGenerator from "./components/UserStoryGenerator";
+import { FigmaFrame, UserStory, AnalysisSession } from "./lib/types";
 
 export default function Home() {
-  // Componente principale della pagina
-  const [figmaUrl, setFigmaUrl] = useState(""); // Stato per l'URL Figma inserito
-  const [stories, setStories] = useState<string>(""); // Stato per il testo delle user stories generate
-  const [screens, setScreens] = useState<string[]>([]); // Stato per la lista di schermate trovate
-  const [error, setError] = useState<string>(""); // Stato per il messaggio di errore da mostrare
+  const [currentSession, setCurrentSession] = useState<AnalysisSession | null>(
+    null
+  );
+  const [selectedFrames, setSelectedFrames] = useState<FigmaFrame[]>([]);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
 
-  async function handleGenerate() {
-    // Gestisce il click su "Generate"
-    setError(""); // Pulisce eventuali errori precedenti
-    const response = await fetch("/api/generate", {
-      // Chiama l'endpoint server-side
-      method: "POST", // Metodo HTTP
-      headers: { "Content-Type": "application/json" }, // Payload in JSON
-      body: JSON.stringify({ figmaUrl }), // Invia l'URL Figma al server
-    });
-    console.log("/api/generate status:", response.status); // Logga lo status HTTP
-    const data = await response.json(); // Parsea la risposta JSON
-    console.log("AI responded:", Boolean(data?.stories)); // True se il modello ha risposto
-    if (!response.ok) {
-      // Se status non è 2xx
-      if (response.status === 400) {
-        // Gestione specifica per 400
-        setError(
-          data?.error ||
-            "URL Figma non valido. Usa un link del tipo: https://www.figma.com/file/<FILE_KEY>/..."
-        );
-      } else {
-        setError(data?.error || "Errore nella generazione"); // Messaggio generico
-      }
-      setStories(""); // Svuota storie
-      setScreens([]); // Svuota schermate
-      return; // Interrompe il flusso
+  const handleFramesImported = (frames: FigmaFrame[], fileId: string) => {
+    const newSession: AnalysisSession = {
+      id: `session-${Date.now()}`,
+      figmaFileId: fileId,
+      frames,
+      userStories: [],
+      createdAt: new Date(),
+    };
+
+    setCurrentSession(newSession);
+    setSelectedFrames([]);
+  };
+
+  const handleStoriesGenerated = (stories: UserStory[]) => {
+    if (currentSession) {
+      setCurrentSession({
+        ...currentSession,
+        userStories: stories,
+      });
     }
-    setStories(data.stories); // Salva le user stories generate
-    setScreens(data.screens || []); // Salva la lista delle schermate
-  }
+  };
 
   return (
-    // Render del componente
-    <main style={{ padding: 40 }}>
-      {" "}
-      {/* Contenitore principale con padding */}
-      <h1>Figma to Stories</h1> {/* Titolo della pagina */}
-      <input
-        type="text"
-        value={figmaUrl}
-        onChange={(e) => setFigmaUrl(e.target.value)}
-        placeholder="Paste your Figma URL"
-        style={{ width: "400px", marginRight: "10px" }}
-      />{" "}
-      {/* Campo di input per incollare l'URL Figma */}
-      <button onClick={handleGenerate}>Generate</button>{" "}
-      {/* Avvia la generazione */}
-      {error && <p style={{ color: "red", marginTop: 12 }}>{error}</p>}{" "}
-      {/* Messaggio di errore */}
-      {stories && !error && (
-        <div style={{ marginTop: 20 }}>
-          {" "}
-          {/* Contenitore dei risultati */}
-          <h2>Schermate trovate:</h2> {/* Intestazione lista schermate */}
-          <ul>
-            {screens.map((s: string, i: number) => (
-              <li key={i}>{s}</li>
-            ))}
-          </ul>{" "}
-          {/* Lista delle schermate */}
-          <h2>User Stories generate:</h2> {/* Intestazione user stories */}
-          <pre style={{ background: "#eee", padding: 20 }}>{stories}</pre>{" "}
-          {/* Testo delle stories */}
+    <div className="space-y-8">
+      {/* Hero Section */}
+      <div className="text-center py-12">
+        <h1 className="text-4xl font-bold text-warm-gray-900 mb-4">
+          Transform Figma Designs into User Stories
+        </h1>
+        <p className="text-xl text-warm-gray-600 max-w-2xl mx-auto">
+          Upload your Figma frames and let AI generate comprehensive user
+          stories for your product backlog. Perfect for PMs who want to move
+          fast.
+        </p>
+      </div>
+
+      {/* Main Workflow */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        {/* Left Column: Import */}
+        <div className="space-y-6">
+          <FigmaImporter
+            onFramesImported={handleFramesImported}
+            selectedFrames={selectedFrames}
+            onFrameSelectionChange={setSelectedFrames}
+            currentSession={currentSession}
+          />
+        </div>
+
+        {/* Right Column: Generate & Results */}
+        <div className="space-y-6">
+          {currentSession && (
+            <UserStoryGenerator
+              session={currentSession}
+              selectedFrames={selectedFrames}
+              onStoriesGenerated={handleStoriesGenerated}
+              isAnalyzing={isAnalyzing}
+              onAnalyzingChange={setIsAnalyzing}
+            />
+          )}
+        </div>
+      </div>
+
+      {/* Results Summary */}
+      {currentSession?.userStories.length > 0 && (
+        <div className="mt-12">
+          <div className="bg-white rounded-xl shadow-sm border border-warm-200 p-6">
+            <h3 className="text-lg font-semibold text-warm-gray-900 mb-4">
+              Analysis Summary
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-center">
+              <div className="bg-warm-50 rounded-lg p-4">
+                <div className="text-2xl font-bold text-warm-600">
+                  {currentSession.frames.length}
+                </div>
+                <div className="text-sm text-warm-gray-600">
+                  Frames Analyzed
+                </div>
+              </div>
+              <div className="bg-warm-50 rounded-lg p-4">
+                <div className="text-2xl font-bold text-warm-600">
+                  {currentSession.userStories.length}
+                </div>
+                <div className="text-sm text-warm-gray-600">
+                  Stories Generated
+                </div>
+              </div>
+              <div className="bg-warm-50 rounded-lg p-4">
+                <div className="text-2xl font-bold text-warm-600">
+                  {
+                    currentSession.userStories.filter(
+                      (s) => s.priority === "High"
+                    ).length
+                  }
+                </div>
+                <div className="text-sm text-warm-gray-600">High Priority</div>
+              </div>
+              <div className="bg-warm-50 rounded-lg p-4">
+                <div className="text-2xl font-bold text-warm-600">
+                  {currentSession.userStories.reduce(
+                    (sum, s) => sum + s.storyPoints,
+                    0
+                  )}
+                </div>
+                <div className="text-sm text-warm-gray-600">
+                  Total Story Points
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       )}
-    </main>
+    </div>
   );
 }
