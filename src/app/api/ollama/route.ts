@@ -33,22 +33,35 @@ export async function POST(req: NextRequest) {
     // Process each frame
     for (const frame of frames) {
       try {
+        console.log(
+          `Processing frame: ${frame.name}, Image URL: ${frame.imageUrl}`
+        );
+
         // Convert image URL to base64
         const imageResponse = await fetch(frame.imageUrl);
         if (!imageResponse.ok) {
-          console.warn(`Failed to fetch image for frame ${frame.name}`);
+          console.warn(
+            `Failed to fetch image for frame ${frame.name}: ${imageResponse.status}`
+          );
           continue;
         }
 
         const imageBuffer = await imageResponse.arrayBuffer();
         const base64Image = Buffer.from(imageBuffer).toString("base64");
 
-        const frameContext = `${context}\n\nFrame: ${frame.name} (${frame.metadata.width}x${frame.metadata.height})`;
+        console.log(
+          `Image converted to base64, size: ${base64Image.length} characters`
+        );
+
+        const frameContext = `Frame: ${frame.name} (${frame.metadata.width}x${frame.metadata.height}) - ${frame.metadata.type}`;
         const stories = await ollamaService.analyzeFrameForUserStories(
           base64Image,
           frameContext
         );
 
+        console.log(
+          `Generated ${stories.length} stories for frame ${frame.name}`
+        );
         allStories.push(...stories);
       } catch (frameError) {
         console.error(`Error processing frame ${frame.name}:`, frameError);

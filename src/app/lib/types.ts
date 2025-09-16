@@ -2,6 +2,7 @@ export interface FigmaFrame {
   id: string;
   name: string;
   imageUrl: string;
+  fileSize?: number; // Size in bytes
   metadata: {
     width: number;
     height: number;

@@ -12,20 +12,30 @@ export class OllamaService {
     context: string = ""
   ): Promise<UserStory[]> {
     const prompt = `
-    As a Product Manager, analyze this UI design and generate comprehensive user stories.
-    
+    You are an expert Product Manager analyzing a UI/UX design. Look carefully at this image and identify ALL user flows, interactions, and features visible in the design.
+
     Context: ${context}
     
-    For each UI element or feature you identify, create user stories following this format:
-    - Title: Brief, action-oriented title
-    - Description: As a [user type], I want to [action] so that [benefit]
-    - Acceptance Criteria: 3-5 specific, testable criteria
-    - Priority: High/Medium/Low
-    - Story Points: 1-8 (Fibonacci scale)
-    - Persona: Primary user type
-    - Category: UI component type (Navigation, Forms, Content, etc.)
+    IMPORTANT: Analyze the visual elements you can see in the image:
+    - Navigation patterns and menus
+    - Buttons, forms, and input fields
+    - Data displays, lists, and tables
+    - Modal dialogs and overlays
+    - User workflows and step-by-step processes
+    - Any interactive elements or components
     
-    Return ONLY a JSON array of user stories. No additional text.
+    For each distinct user flow or feature you identify, create a detailed user story with:
+    - Title: Specific, action-oriented title describing the feature
+    - Description: As a [specific user type], I want to [specific action] so that [clear benefit]
+    - Acceptance Criteria: 3-5 specific, testable criteria based on what you see
+    - Priority: High/Medium/Low (High for core flows, Medium for secondary features)
+    - Story Points: 1-8 (Fibonacci scale)
+    - Persona: Specific user type (e.g., "Mobile App User", "Admin", "Customer")
+    - Category: Specific component type (e.g., "Authentication", "Data Visualization", "Settings")
+    
+    Focus on what you can actually SEE in the image. Be specific about visual elements and user flows.
+    
+    Return ONLY a valid JSON array of user stories. No markdown formatting, no additional text.
     `;
 
     try {
@@ -50,14 +60,59 @@ export class OllamaService {
 
       // Parse the JSON response from Ollama
       try {
-        const userStories = JSON.parse(data.response);
+        let responseText = data.response;
+
+        // Remove markdown code blocks if present
+        if (responseText.includes("```json")) {
+          responseText = responseText
+            .replace(/```json\s*/, "")
+            .replace(/```\s*$/, "");
+        }
+        if (responseText.includes("```")) {
+          responseText = responseText
+            .replace(/```\s*/, "")
+            .replace(/```\s*$/, "");
+        }
+
+        // Clean up any leading/trailing whitespace
+        responseText = responseText.trim();
+
+        // Handle different response structures
+        let userStories;
+        const parsed = JSON.parse(responseText);
+
+        // Check if response has user_stories array or is direct array
+        if (parsed.user_stories && Array.isArray(parsed.user_stories)) {
+          userStories = parsed.user_stories;
+        } else if (Array.isArray(parsed)) {
+          userStories = parsed;
+        } else {
+          throw new Error("Invalid response structure");
+        }
+
         return userStories.map((story: any, index: number) => ({
           id: `story-${Date.now()}-${index}`,
-          ...story,
+          title: story.title || `User Story ${index + 1}`,
+          description:
+            story.description || story.story || "No description provided",
+          acceptanceCriteria: Array.isArray(story.acceptance_criteria)
+            ? story.acceptance_criteria
+            : Array.isArray(story.acceptanceCriteria)
+            ? story.acceptanceCriteria
+            : story.criteria
+            ? [story.criteria]
+            : ["Criteria not specified"],
+          priority: story.priority || "Medium",
+          storyPoints: parseInt(
+            story.story_points || story.storyPoints || story.points || 3
+          ),
+          persona: story.persona || story.userType || "End User",
+          category: story.category || story.type || "UI Component",
         }));
       } catch (parseError) {
         // Fallback: extract JSON from text if possible
         console.error("Failed to parse Ollama response as JSON:", parseError);
+        console.error("Response was:", data.response);
         return this.fallbackStoryGeneration(data.response);
       }
     } catch (error) {
