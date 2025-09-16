@@ -76,6 +76,12 @@ export class OllamaService {
 
         // Clean up any leading/trailing whitespace
         responseText = responseText.trim();
+        
+        // Fix common JSON syntax errors
+        responseText = responseText
+          .replace(/"title":\s*"[^"]*"\s*"description":/g, '"title": "$1", "description":') // Fix missing comma after title
+          .replace(/"description":\s*"[^"]*"\s*"acceptance_criteria":/g, '"description": "$1", "acceptance_criteria":') // Fix missing comma after description
+          .replace(/"persona":\s*"[^"]*"\s*"category":/g, '"persona": "$1", "category":'); // Fix missing comma after persona
 
         // Handle different response structures
         let userStories;
